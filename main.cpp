@@ -32,6 +32,25 @@ extern "C"
 #define OUTPUT_YUV420P 0
 
 
+//Refresh
+#define SFM_REFRESH_EVENT  (SDL_USEREVENT + 1)
+
+int thread_exit = 0;
+//Thread
+int sfp_refresh_thread(void *opaque)
+{
+    SDL_Event event;
+    while (thread_exit == 0) {
+        event.type = SFM_REFRESH_EVENT;
+        SDL_PushEvent(&event);
+        //Wait 40 ms
+        SDL_Delay(40);
+    }
+    return 0;
+}
+
+SDL_Thread *video_tid = SDL_CreateThread(sfp_refresh_thread, NULL);
+
 bool avDecode(AVCodecContext *pCodecCtx,
               AVFrame * pFrame,
               AVFrame * pFrameYUV,
@@ -51,6 +70,7 @@ bool avDecode(AVCodecContext *pCodecCtx,
     }
 
     SDL_LockYUVOverlay(bmp);
+
     pFrameYUV->data[0] = bmp->pixels[0];
     pFrameYUV->data[1] = bmp->pixels[2];
     pFrameYUV->data[2] = bmp->pixels[1];
@@ -67,15 +87,13 @@ bool avDecode(AVCodecContext *pCodecCtx,
               pFrameYUV->linesize);
 
 #if OUTPUT_YUV420P
-    int y_size=pCodecCtx->width*pCodecCtx->height;
-            fwrite(pFrameYUV->data[0],1,y_size, fpYuv);    //Y
-            fwrite(pFrameYUV->data[1],1,y_size/4, fpYuv);  //U
-            fwrite(pFrameYUV->data[2],1,y_size/4, fpYuv);  //V
+    int y_size = pCodecCtx->width*pCodecCtx->height;
+    fwrite(pFrameYUV->data[0],1,y_size, fpYuv);    //Y
+    fwrite(pFrameYUV->data[1],1,y_size/4, fpYuv);  //U
+    fwrite(pFrameYUV->data[2],1,y_size/4, fpYuv);  //V
 #endif
     SDL_UnlockYUVOverlay(bmp);
     SDL_DisplayYUVOverlay(bmp, &rect);
-    //Delay 40ms
-    SDL_Delay(40);
     return true;
 }
 
@@ -83,7 +101,7 @@ int main(int argc, char* argv[])
 {
     const char *filepath = "../test.h265";
     // 初始化
-    av_register_all();
+    av_register_all(); // 注册所有的编解码器
     avformat_network_init();
 
     // avformat环境
@@ -192,39 +210,41 @@ int main(int argc, char* argv[])
                                         NULL);
     //------------------------------
 
-    // decode
+
+    //Event Loop
+    SDL_Event event;
     AVPacket *packet = (AVPacket *)av_malloc(sizeof(AVPacket));
-    while(0 == av_read_frame(pFormatCtx, packet))
-    {
-        if(packet->stream_index == videoIndex)
+
+    for (;;) {
+        // Wait
+        SDL_WaitEvent(&event);
+        if(SFM_REFRESH_EVENT == event.type)
         {
-            if(!avDecode(pCodecCtx,
-                         pFrame,
-                         pFrameYUV,
-                         bmp,
-                         swsCtx,
-                         packet,
-                         rect))
+            //------------------------------
+            if(0 == av_read_frame(pFormatCtx, packet))
             {
-                printf("avdecode error\n");
+                if(packet->stream_index == videoIndex)
+                {
+                    if(!avDecode(pCodecCtx,
+                                 pFrame,
+                                 pFrameYUV,
+                                 bmp,
+                                 swsCtx,
+                                 packet,
+                                 rect))
+                    {
+                        printf("avdecode error\n");
+                        break;
+                    }
+                }
+                av_packet_unref(packet);
+            }
+            else
+            {
+                //Exit Thread
+                thread_exit = 1;
                 break;
             }
-        }
-        av_packet_unref(packet);
-    }
-
-    //FIX: Flush Frames remained in Codec  
-    while (1)
-    {
-        if(!avDecode(pCodecCtx,
-                     pFrame,
-                     pFrameYUV,
-                     bmp,
-                     swsCtx,
-                     packet,
-                     rect))
-        {
-            break;
         }
     }
 

@@ -21,7 +21,12 @@ if(DEFINED FFMPEG_PATH)
 
     INCLUDE_DIRECTORIES(${FFMPEG_INCLUDE_DIR})
     LINK_DIRECTORIES(${FFMPEG_LIBRARY_DIR})
-    set(FFMPEG_LIBRARIES avcodec avformat swscale avutil)
+    set(FFMPEG_LIBRARIES
+            avcodec
+            avformat
+            swscale
+            avutil
+            )
 
     message(STATUS "FFMPEG_INCLUDE_DIR: ${FFMPEG_INCLUDE_DIR}")
     message(STATUS "FFMPEG_LIBRARY_DIR: ${FFMPEG_LIBRARY_DIR}")
