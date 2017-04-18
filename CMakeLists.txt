@@ -57,7 +57,7 @@ else()
 endif()
 
 
-set(SOURCE_FILES main.cpp)
+set(SOURCE_FILES main.cpp PrintAvDetails.h)
 
 add_executable(simplest_ffmpeg_player ${SOURCE_FILES})
 
